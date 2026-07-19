@@ -1,0 +1,84 @@
+llm-embed
+Copyright 2024-2026 Daniel Brushchenko
+
+================================================================================
+
+Disclaimer
+================================================================================
+
+This software is provided "as is", without warranty of any kind, express or
+implied, including but not limited to the warranties of merchantability,
+fitness for a particular purpose, and noninfringement. In no event shall the
+author be held liable for any claim, damages, or other liability arising from,
+out of, or in connection with the software or the use or other dealings in
+the software.
+
+================================================================================
+
+Third-Party Attributions
+================================================================================
+
+1. Gonum (BSD-3-Clause)
+   https://github.com/gonum/gonum
+
+   The tiled parallel GEMM algorithm in internal/ggml/sgemm.go is adapted from
+   gonum.org/v1/gonum/blas/gonum. The implementation was simplified and extended
+   with KC blocking, prefetch, k2 unrolling, and N→K→M loop ordering.
+
+   Copyright ©2014 The Gonum Authors. All rights reserved.
+
+   Redistribution and use in source and binary forms, with or without
+   modification, are permitted provided that the following conditions are met:
+     * Redistributions of source code must retain the above copyright notice,
+       this list of conditions and the following disclaimer.
+     * Redistributions in binary form must reproduce the above copyright notice,
+       this list of conditions and the following disclaimer in the documentation
+       and/or other materials provided with the distribution.
+     * Neither the name of the Gonum project nor the names of its contributors
+       may be used to endorse or promote products derived from this software
+       without specific prior written permission.
+
+   THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+   AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+   IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+   ARE DISCLAIMED.
+
+2. OpenBLAS (BSD-3-Clause)
+   https://github.com/OpenMathLib/OpenBLAS
+
+   The cache blocking strategy (KC parameter tuning), prefetch patterns, and
+   loop ordering in our GEMM implementation were informed by studying the
+   OpenBLAS Haswell/Skylake-X kernel source code. No code was copied.
+
+   Copyright (c) 2011-2024, The OpenBLAS Project. All rights reserved.
+
+3. Ebitengine purego (Apache-2.0)
+   https://github.com/ebitengine/purego
+
+   The technique of calling C shared libraries from Go without CGO using
+   //go:cgo_import_dynamic and runtime.cgocall was informed by the purego
+   project. The dlopen/dlsym assembly pattern follows their approach.
+   No code was directly copied.
+
+   Copyright 2022 The Ebitengine Authors.
+
+4. GGML/GGUF Format
+   https://github.com/ggerganov/ggml
+
+   The GGUF file format and quantization schemes (Q4_K, Q5_K, Q6_K, Q8_0)
+   are defined by the GGML project. Our implementation parses this format
+   and implements compatible dequantization.
+
+   Copyright (c) 2023-2024 Georgi Gerganov. MIT License.
+
+================================================================================
+
+Intel MKL (Optional Runtime Dependency)
+================================================================================
+
+This software can optionally load Intel Math Kernel Library (MKL) at runtime
+via dlopen for accelerated SGEMM operations. MKL is not included in this
+source distribution and is subject to Intel's own licensing terms.
+See: https://www.intel.com/content/www/us/en/developer/tools/oneapi/onemkl.html
+
+================================================================================

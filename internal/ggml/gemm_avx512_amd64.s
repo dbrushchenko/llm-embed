@@ -1,0 +1,195 @@
+//go:build amd64
+
+#include "textflag.h"
+
+// func gemmMicroKernel6x32AVX512(
+//     a *float32,    // packed A panel: 6×KC (k-major)
+//     b *float32,    // packed B panel: KC×32 (k-major)
+//     c *float32,    // output C tile: 6 rows, stride=ldc floats
+//     KC int,        // inner dimension loop count
+//     ldc int,       // C row stride in floats
+// )
+//
+// Computes: C[6×32] += A[6×KC] × B[KC×32]
+// Uses ZMM registers (AVX-512): 16 floats per register, 2× throughput vs AVX2.
+//
+//   Z0-Z5:   accumulators for columns 0-15 (6 rows)
+//   Z6-Z11:  accumulators for columns 16-31 (6 rows)
+//   Z12:     B[k][0:16]
+//   Z13:     B[k][16:32]
+//   Z14:     broadcast A[m][k]
+//
+TEXT ·gemmMicroKernel6x32AVX512(SB), NOSPLIT, $0-40
+	MOVQ a+0(FP), SI
+	MOVQ b+8(FP), DI
+	MOVQ c+16(FP), R8
+	MOVQ KC+24(FP), CX
+	MOVQ ldc+32(FP), R9
+	SHLQ $2, R9              // byte stride
+
+	// Zero all 12 accumulators (AVX-512 VPXORD for ZMM)
+	VPXORD Z0, Z0, Z0
+	VPXORD Z1, Z1, Z1
+	VPXORD Z2, Z2, Z2
+	VPXORD Z3, Z3, Z3
+	VPXORD Z4, Z4, Z4
+	VPXORD Z5, Z5, Z5
+	VPXORD Z6, Z6, Z6
+	VPXORD Z7, Z7, Z7
+	VPXORD Z8, Z8, Z8
+	VPXORD Z9, Z9, Z9
+	VPXORD Z10, Z10, Z10
+	VPXORD Z11, Z11, Z11
+
+	TESTQ CX, CX
+	JZ store32
+
+	// K=2 unrolled loop
+	MOVQ CX, DX
+	SHRQ $1, DX
+	ANDQ $1, CX
+
+	TESTQ DX, DX
+	JZ loop32_remainder
+
+loop32_k2:
+	PREFETCHT0 512(SI)
+	PREFETCHT0 256(DI)
+
+	// === k+0 ===
+	VMOVUPS (DI), Z12          // B[k][0:16]
+	VMOVUPS 64(DI), Z13        // B[k][16:32]
+
+	VBROADCASTSS (SI), Z14
+	VFMADD231PS Z14, Z12, Z0
+	VFMADD231PS Z14, Z13, Z6
+
+	VBROADCASTSS 4(SI), Z14
+	VFMADD231PS Z14, Z12, Z1
+	VFMADD231PS Z14, Z13, Z7
+
+	VBROADCASTSS 8(SI), Z14
+	VFMADD231PS Z14, Z12, Z2
+	VFMADD231PS Z14, Z13, Z8
+
+	VBROADCASTSS 12(SI), Z14
+	VFMADD231PS Z14, Z12, Z3
+	VFMADD231PS Z14, Z13, Z9
+
+	VBROADCASTSS 16(SI), Z14
+	VFMADD231PS Z14, Z12, Z4
+	VFMADD231PS Z14, Z13, Z10
+
+	VBROADCASTSS 20(SI), Z14
+	VFMADD231PS Z14, Z12, Z5
+	VFMADD231PS Z14, Z13, Z11
+
+	// === k+1 ===
+	VMOVUPS 128(DI), Z12       // B[k+1][0:16]
+	VMOVUPS 192(DI), Z13       // B[k+1][16:32]
+
+	VBROADCASTSS 24(SI), Z14
+	VFMADD231PS Z14, Z12, Z0
+	VFMADD231PS Z14, Z13, Z6
+
+	VBROADCASTSS 28(SI), Z14
+	VFMADD231PS Z14, Z12, Z1
+	VFMADD231PS Z14, Z13, Z7
+
+	VBROADCASTSS 32(SI), Z14
+	VFMADD231PS Z14, Z12, Z2
+	VFMADD231PS Z14, Z13, Z8
+
+	VBROADCASTSS 36(SI), Z14
+	VFMADD231PS Z14, Z12, Z3
+	VFMADD231PS Z14, Z13, Z9
+
+	VBROADCASTSS 40(SI), Z14
+	VFMADD231PS Z14, Z12, Z4
+	VFMADD231PS Z14, Z13, Z10
+
+	VBROADCASTSS 44(SI), Z14
+	VFMADD231PS Z14, Z12, Z5
+	VFMADD231PS Z14, Z13, Z11
+
+	// Advance: B by 2×32 floats = 256 bytes, A by 2×6 floats = 48 bytes
+	ADDQ $256, DI
+	ADDQ $48, SI
+
+	DECQ DX
+	JNZ loop32_k2
+
+loop32_remainder:
+	TESTQ CX, CX
+	JZ store32
+
+	VMOVUPS (DI), Z12
+	VMOVUPS 64(DI), Z13
+	ADDQ $128, DI
+
+	VBROADCASTSS (SI), Z14
+	VFMADD231PS Z14, Z12, Z0
+	VFMADD231PS Z14, Z13, Z6
+
+	VBROADCASTSS 4(SI), Z14
+	VFMADD231PS Z14, Z12, Z1
+	VFMADD231PS Z14, Z13, Z7
+
+	VBROADCASTSS 8(SI), Z14
+	VFMADD231PS Z14, Z12, Z2
+	VFMADD231PS Z14, Z13, Z8
+
+	VBROADCASTSS 12(SI), Z14
+	VFMADD231PS Z14, Z12, Z3
+	VFMADD231PS Z14, Z13, Z9
+
+	VBROADCASTSS 16(SI), Z14
+	VFMADD231PS Z14, Z12, Z4
+	VFMADD231PS Z14, Z13, Z10
+
+	VBROADCASTSS 20(SI), Z14
+	VFMADD231PS Z14, Z12, Z5
+	VFMADD231PS Z14, Z13, Z11
+
+	ADDQ $24, SI
+
+store32:
+	// Store 6 rows × 32 cols (two 16-wide stores per row)
+	// Row 0
+	VADDPS (R8), Z0, Z0
+	VMOVUPS Z0, (R8)
+	VADDPS 64(R8), Z6, Z6
+	VMOVUPS Z6, 64(R8)
+	// Row 1
+	LEAQ (R8)(R9*1), R10
+	VADDPS (R10), Z1, Z1
+	VMOVUPS Z1, (R10)
+	VADDPS 64(R10), Z7, Z7
+	VMOVUPS Z7, 64(R10)
+	// Row 2
+	LEAQ (R10)(R9*1), R10
+	VADDPS (R10), Z2, Z2
+	VMOVUPS Z2, (R10)
+	VADDPS 64(R10), Z8, Z8
+	VMOVUPS Z8, 64(R10)
+	// Row 3
+	LEAQ (R10)(R9*1), R10
+	VADDPS (R10), Z3, Z3
+	VMOVUPS Z3, (R10)
+	VADDPS 64(R10), Z9, Z9
+	VMOVUPS Z9, 64(R10)
+	// Row 4
+	LEAQ (R10)(R9*1), R10
+	VADDPS (R10), Z4, Z4
+	VMOVUPS Z4, (R10)
+	VADDPS 64(R10), Z10, Z10
+	VMOVUPS Z10, 64(R10)
+	// Row 5
+	LEAQ (R10)(R9*1), R10
+	VADDPS (R10), Z5, Z5
+	VMOVUPS Z5, (R10)
+	VADDPS 64(R10), Z11, Z11
+	VMOVUPS Z11, 64(R10)
+
+	VZEROUPPER
+	RET

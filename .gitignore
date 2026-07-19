@@ -1,0 +1,19 @@
+# Models (download separately)
+models/*.gguf
+models/*.so
+models/mkl/
+models/mkl-min/
+
+# Feature requests (internal)
+*_FEATURE_REQUEST.md
+
+# Build artifacts
+*.exe
+cmd/t.go
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Internal docs (not for public)
+docs/
