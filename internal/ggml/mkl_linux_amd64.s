@@ -3,18 +3,20 @@
 #include "textflag.h"
 
 // func dlopen_raw(path *byte, mode int32) uintptr
-TEXT ·dlopen_raw(SB), NOSPLIT, $0-24
+// 4KB frame: dlopen's call chain (ELF loader, symbol resolution) is deep.
+// 8-byte alignment pad ensures RSP is 16-byte aligned at CALL site.
+TEXT ·dlopen_raw(SB), NOSPLIT, $4096-24
 	MOVQ path+0(FP), DI
 	MOVL mode+8(FP), SI
-	CALL purego_dlopen(SB)
+	CALL dlopen_sym(SB)
 	MOVQ AX, ret+16(FP)
 	RET
 
 // func dlsym_raw(handle uintptr, name *byte) uintptr
-TEXT ·dlsym_raw(SB), NOSPLIT, $0-24
+TEXT ·dlsym_raw(SB), NOSPLIT, $4096-24
 	MOVQ handle+0(FP), DI
 	MOVQ name+8(FP), SI
-	CALL purego_dlsym(SB)
+	CALL dlsym_sym(SB)
 	MOVQ AX, ret+16(FP)
 	RET
 
