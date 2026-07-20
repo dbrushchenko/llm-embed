@@ -4,8 +4,7 @@
 
 // func dlopen_raw(path *byte, mode int32) uintptr
 // 4KB frame: dlopen's call chain (ELF loader, symbol resolution) is deep.
-// 8-byte alignment pad ensures RSP is 16-byte aligned at CALL site.
-TEXT ·dlopen_raw(SB), NOSPLIT, $4096-24
+TEXT ·dlopen_raw(SB), $4096-24
 	MOVQ path+0(FP), DI
 	MOVL mode+8(FP), SI
 	CALL dlopen_sym(SB)
@@ -13,7 +12,7 @@ TEXT ·dlopen_raw(SB), NOSPLIT, $4096-24
 	RET
 
 // func dlsym_raw(handle uintptr, name *byte) uintptr
-TEXT ·dlsym_raw(SB), NOSPLIT, $4096-24
+TEXT ·dlsym_raw(SB), $4096-24
 	MOVQ handle+0(FP), DI
 	MOVQ name+8(FP), SI
 	CALL dlsym_sym(SB)
