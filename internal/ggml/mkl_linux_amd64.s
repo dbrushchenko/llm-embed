@@ -2,27 +2,28 @@
 
 #include "textflag.h"
 
-// func dlopen_raw(path *byte, mode int32) uintptr
-// 4KB frame: dlopen's call chain (ELF loader, symbol resolution) is deep.
-TEXT ·dlopen_raw(SB), $4096-24
-	MOVQ path+0(FP), DI
-	MOVL mode+8(FP), SI
+// dlopen_trampoline: called on g0 stack via runtime.asmcgocall.
+// DI = *dlopenArgs{path uintptr, mode uintptr, ret uintptr}
+TEXT ·dlopen_trampoline(SB), NOSPLIT, $0
+	MOVQ DI, BX            // save args struct pointer
+	MOVQ 8(BX), SI         // SI = mode (2nd C arg)
+	MOVQ 0(BX), DI         // DI = path (1st C arg)
 	CALL dlopen_sym(SB)
-	MOVQ AX, ret+16(FP)
+	MOVQ AX, 16(BX)       // store return value in args.ret
 	RET
 
-// func dlsym_raw(handle uintptr, name *byte) uintptr
-TEXT ·dlsym_raw(SB), $4096-24
-	MOVQ handle+0(FP), DI
-	MOVQ name+8(FP), SI
+// dlsym_trampoline: called on g0 stack via runtime.asmcgocall.
+// DI = *dlsymArgs{handle uintptr, name uintptr, ret uintptr}
+TEXT ·dlsym_trampoline(SB), NOSPLIT, $0
+	MOVQ DI, BX            // save args struct pointer
+	MOVQ 8(BX), SI         // SI = name (2nd C arg)
+	MOVQ 0(BX), DI         // DI = handle (1st C arg)
 	CALL dlsym_sym(SB)
-	MOVQ AX, ret+16(FP)
+	MOVQ AX, 16(BX)       // store return value in args.ret
 	RET
 
-// func callCblasSgemmDirect(args unsafe.Pointer)
-// Direct call to cblas_sgemm via C ABI. 64KB frame for MKL dispatcher stack.
-// MKL threading uses OS pthreads (own stacks), so goroutine stack only needs
-// enough for the dispatch code.
+// callCblasSgemmDirect: called directly (64KB frame, proven to work).
+// MKL's sgemm uses pthreads internally (doesn't recurse on our stack).
 //
 // sgemmCallArgs layout (all uintptr = 8 bytes):
 //   0: fn, 8: order, 16: transA, 24: transB, 32: m, 40: n, 48: k

@@ -66,20 +66,56 @@ func MKLAvailable() bool {
 }
 
 
-// dlopen_raw and dlsym_raw are implemented in mkl_linux_amd64.s
-func dlopen_raw(path *byte, mode int32) uintptr
-func dlsym_raw(handle uintptr, name *byte) uintptr
+// dlopen_trampoline and dlsym_trampoline are called on g0 via asmcgocall.
+func dlopen_trampoline()
+func dlsym_trampoline()
 
-// dlopen_wrapper loads a shared library by path.
-func dlopen_wrapper(path string) uintptr {
-	cpath := append([]byte(path), 0) // null-terminate
-	return dlopen_raw(&cpath[0], 2)  // RTLD_NOW = 2
+// asmcgocall switches to g0 stack and calls fn(arg).
+// Required for dlopen because glibc's ELF loader needs deep stack + TLS.
+//
+//go:linkname asmcgocall runtime.asmcgocall
+//go:noescape
+func asmcgocall(fn, arg unsafe.Pointer) int32
+
+// dlopen args passed to trampoline via asmcgocall.
+type dlopenArgs struct {
+	path uintptr // *byte (null-terminated)
+	mode uintptr
+	ret  uintptr // return value
 }
 
-// dlsym_wrapper resolves a symbol from a library handle.
+// dlsym args passed to trampoline via asmcgocall.
+type dlsymArgs struct {
+	handle uintptr
+	name   uintptr // *byte (null-terminated)
+	ret    uintptr // return value
+}
+
+//go:nosplit
+func funcPC(fn func()) uintptr {
+	return **(**uintptr)(unsafe.Pointer(&fn))
+}
+
+// dlopen_wrapper loads a shared library by path (switches to g0 stack).
+func dlopen_wrapper(path string) uintptr {
+	cpath := append([]byte(path), 0)
+	args := dlopenArgs{
+		path: uintptr(unsafe.Pointer(&cpath[0])),
+		mode: 2, // RTLD_NOW
+	}
+	asmcgocall(unsafe.Pointer(funcPC(dlopen_trampoline)), unsafe.Pointer(&args))
+	return args.ret
+}
+
+// dlsym_wrapper resolves a symbol from a library handle (switches to g0 stack).
 func dlsym_wrapper(handle uintptr, name string) uintptr {
-	cname := append([]byte(name), 0) // null-terminate
-	return dlsym_raw(handle, &cname[0])
+	cname := append([]byte(name), 0)
+	args := dlsymArgs{
+		handle: handle,
+		name:   uintptr(unsafe.Pointer(&cname[0])),
+	}
+	asmcgocall(unsafe.Pointer(funcPC(dlsym_trampoline)), unsafe.Pointer(&args))
+	return args.ret
 }
 
 // sgemmCallArgs is the packed argument struct for the assembly trampoline.
